@@ -1,0 +1,29 @@
+/* Reset some default styles for better presentation */
+body, h2, p {
+    margin: 0;
+    padding: 0;
+}
+
+.container {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    height: 100vh;
+    background-color: #f0f0f0; /* Background color for the whole page */
+}
+
+.box {
+    text-align: center;
+    padding: 20px;
+    border-radius: 8px;
+    width: 250px;
+    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
+}
+
+.dry {
+    background-color: #FFCC99; /* Color for "Too Dry" box */
+}
+
+.humid {
+    background-color: #99CCFF; /* Color for "Too Humid" box */
+}
