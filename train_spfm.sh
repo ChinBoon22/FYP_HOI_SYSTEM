@@ -1,0 +1,35 @@
+python -m torch.distributed.launch \
+  --nproc_per_node 2 \
+  --nnodes=1 \
+  --use_env main.py \
+  --distributed \
+  --method vidt \
+  --epochs 150 \
+  --optimizer adamw \
+  --lr 1e-4 \
+  --weight_decay 1e-5 \
+  --pre_trained True \
+  --backbone_name convnext_tiny \
+  --batch_size 4 \
+  --aux_loss True \
+  --with_obj_box_refine True \
+  --with_sub_box_refine True \
+  --with_interaction_box_refine True \
+  --with_interaction_vector_refine True \
+  --det_token_num 100 \
+  --inter_token_num 100 \
+  --dataset_file 'spfm' \
+  --num_verb_classes 1 \
+  --num_obj_classes 3 \
+  --root_path 'data/spfm' \
+  --output_dir 'spfm/distributed/convnext_tiny/cosine_lr_sched' \
+  --train_path 'data/spfm/images/train' \
+  --train_anno_path 'data/spfm/annotations/train_anno.json' \
+  --test_path 'data/spfm/images/train' \
+  --test_anno_path 'data/spfm/annotations/train_anno.json' \
+  --use_nms \
+  --predict_interaction_vector \
+  --epff True \
+  --num_feature_levels 3 \
+  --single_branch_decoder \
+  
