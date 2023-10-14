@@ -1,6 +1,9 @@
 import pytest
 import torch
 
+import sys
+sys.path.insert(0, '/home/cyphi02/MDS01/fyp-weapon-detection')
+
 from methods.vidt.criterion import SetCriterion
 from methods.vidt.matcher import HungarianMatcher
 

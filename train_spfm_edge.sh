@@ -24,11 +24,11 @@ python -m torch.distributed.launch \
   --dataset_file 'spfm' \
   --num_verb_classes 1 \
   --num_obj_classes 3 \
-  --root_path 'data/spfm' \
-  --output_dir 'spfm_edge/distributed/efficientnetv2_s/cosine_lr_sched' \
-  --train_path 'data/spfm/images/train' \
+  --root_path 'data' \
+  --output_dir 'output' \
+  --train_path 'data/images/train' \
   --train_anno_path 'data/spfm/annotations/train_anno.json' \
-  --test_path 'data/spfm/images/train' \
+  --test_path 'data/images/test' \
   --test_anno_path 'data/spfm/annotations/test_anno.json' \
   --use_nms \
   --predict_interaction_vector \

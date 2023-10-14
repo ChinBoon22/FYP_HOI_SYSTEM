@@ -1,12 +1,14 @@
 import pytest
 import torch
+from torch import nn
 
 import sys
 sys.path.insert(0, '/home/cyphi02/MDS01/fyp-weapon-detection')
 
 from methods.vidt.deformable_transformer import DeformableTransformerDecoderLayer\
-    , InteractionLayer, DeformableTransformerDecoder, DeformableTransformer
+    , InteractionLayer, DeformableTransformerDecoder, DeformableTransformer, MLP
 from test_helper_fns import *
+from methods.vidt.hybrid_encoder import CSPRepLayer, HybridEncoder
 
 # defaults
 DIM_MODEL = 256
@@ -24,6 +26,23 @@ ORI_H = 640
 ORI_W = 640
 NUM_DECODER_LAYERS=6
 
+IN_CHANNELS = [512, 1024, 2048]
+FEAT_STRIDES = [8, 16, 32]
+HIDDEN_DIM = 256
+USE_ENCODER_IDX = [2]
+NUM_ENCODER_LAYERS = 1
+PE_TEMPERATURE = 10000
+EXPANSION = 1.0
+DEPTH_MULT = 1.0
+ACT = 'silu'
+TRT = False
+EVAL_SIZE = None
+NUM_BLOCKS = 3
+BATCH = 4
+HEIGHT = 64
+WIDTH = 64
+
+    
 def create_deform_trans_layer(d_model=DIM_MODEL, d_ffn=DIM_FFN,
                                 dropout=DROPOUT,
                                 n_levels=NLEVELS,
@@ -188,7 +207,7 @@ def test_deform_trans_decoder():
     decoder_layer = create_deform_trans_layer()
     inter_decoder_layer = create_deform_trans_layer()
     decoder = DeformableTransformerDecoder(decoder_layer, inter_decoder_layer, None,
-                                            num_layers=NUM_DECODER_LAYERS).cuda()
+                                            num_layers=NUM_DECODER_LAYERS, single_branch=True).cuda()
     tgt, inter_tgt, query_pos, inter_query_pos, ref_points, sub_ref_points\
         , src, src_spatial_shapes, level_start_idx\
             , src_valid_ratios, src_padding_mask = create_decoder_input()
@@ -204,15 +223,15 @@ def test_deform_trans_decoder():
     decoder_layer = create_deform_trans_layer()
     inter_decoder_layer = create_deform_trans_layer()
     decoder = DeformableTransformerDecoder(decoder_layer, inter_decoder_layer, None,
-                                            num_layers=NUM_DECODER_LAYERS).cuda()
+                                            num_layers=NUM_DECODER_LAYERS, single_branch=True).cuda()
     tgt, inter_tgt, query_pos, inter_query_pos, ref_points, sub_ref_points\
         , src, src_spatial_shapes, level_start_idx\
             , src_valid_ratios, src_padding_mask = create_decoder_input()
     
-    out = decoder(tgt, inter_tgt, ref_points, sub_ref_points, src, src_spatial_shapes, 
-                    level_start_idx, src_valid_ratios,
-                    query_pos=query_pos,inter_query_pos=inter_query_pos,
+    
+    out = decoder(tgt, inter_tgt, ref_points, sub_ref_points, ref_points, ref_points, src, src_spatial_shapes, level_start_idx, src_valid_ratios,
                     src_padding_mask=src_padding_mask)
+    
     assert len(out) == 4
     det_out, inter_out, ref_points_out, sub_ref_points_out = out
     assert list(det_out.shape) == list(tgt.shape)
@@ -230,9 +249,7 @@ def test_deform_trans_decoder_interm():
         , src, src_spatial_shapes, level_start_idx\
             , src_valid_ratios, src_padding_mask = create_decoder_input()
     
-    out = decoder(tgt, inter_tgt, ref_points, sub_ref_points, src, src_spatial_shapes, 
-                    level_start_idx, src_valid_ratios,
-                    query_pos=query_pos,inter_query_pos=inter_query_pos,
+    out = decoder(tgt, inter_tgt, ref_points, sub_ref_points, query_pos, inter_query_pos, src, src_spatial_shapes, level_start_idx, src_valid_ratios,
                     src_padding_mask=src_padding_mask)
     assert len(out) == 4
     det_out, inter_out, ref_points_out, sub_ref_points_out = out
@@ -240,3 +257,62 @@ def test_deform_trans_decoder_interm():
     assert list(inter_out.shape) == [NUM_DECODER_LAYERS+1] + list(inter_tgt.shape)
     assert list(ref_points_out.shape) == [NUM_DECODER_LAYERS+1] + list(ref_points.shape)
     assert list(sub_ref_points_out.shape) == [NUM_DECODER_LAYERS+1] + list(sub_ref_points.shape)
+    
+    
+def test_MLP():
+    INPUT_DIMENSION = 512
+    HIDDEN_DIMENSION = OUTPUT_DIMENSION  = 256
+    ACTIVATION = nn.ReLU()
+    NUM_LAYER = 3
+    B = 4
+    x = generate_x((B, INPUT_DIMENSION))
+
+    mlp = MLP(input_dim=INPUT_DIMENSION, hidden_dim=HIDDEN_DIMENSION, output_dim=OUTPUT_DIMENSION, num_layers=NUM_LAYER, activation=ACTIVATION)
+    assert list(mlp(x).shape) == [B, HIDDEN_DIMENSION]
+    
+    
+    
+
+def create_encoder():
+    
+    hybrid_encoder = HybridEncoder(
+        in_channels=IN_CHANNELS,
+        feat_strides=FEAT_STRIDES,
+        hidden_dim=HIDDEN_DIM,
+        use_encoder_idx=USE_ENCODER_IDX,
+        num_encoder_layers=NUM_ENCODER_LAYERS,
+        pe_temperature=PE_TEMPERATURE,
+        expansion=EXPANSION,
+        depth_mult=DEPTH_MULT,
+        act=ACT,
+        trt=TRT,
+        eval_size=EVAL_SIZE)    
+    
+    dummy_input = [generate_x(BATCH, IN_CHANNELS[i], HEIGHT//2**i, WIDTH//2**i) for i in range(len(IN_CHANNELS))]
+    # Perform a forward pass
+    outputs = hybrid_encoder(dummy_input)
+    return outputs
+
+def generate_inter_points(): 
+    
+    encoder =  create_encoder()
+    decoder_layer = create_deform_trans_layer()
+    inter_decoder_layer = create_deform_trans_layer()
+    decoder = DeformableTransformerDecoder(decoder_layer, inter_decoder_layer, None,
+                                            num_layers=NUM_DECODER_LAYERS, return_intermediate=True).cuda()
+    tgt, inter_tgt, query_pos, inter_query_pos, ref_points, sub_ref_points\
+        , src, src_spatial_shapes, level_start_idx\
+            , src_valid_ratios, src_padding_mask = create_decoder_input()
+    
+    class_enc = decoder.class_embed[-1](encoder)
+    verb_enc = decoder.verb_embed[-1](encoder)
+    enc_outputs_class = class_enc.sigmoid() * verb_enc.sigmoid()
+    _, topk_ind = torch.topk(enc_outputs_class.max(-1)[0], 100, axis=1)
+    topk_ind = topk_ind // enc_outputs_class.shape[2]
+            
+    output = decoder.inter_bbox_embed[-1](encoder).sigmoid()
+    print(output.shape)
+    inter_reference_points = torch.gather(inter_reference_points, 1, 
+                               topk_ind.unsqueeze(-1).repeat(1,1,inter_reference_points.shape[-1]))
+    
+    print(inter_reference_points.shape)
